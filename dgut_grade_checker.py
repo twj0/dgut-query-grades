@@ -25,7 +25,8 @@ def encrypt_password_with_js(password: str, aes_key: str) -> str | None:
     if not os.path.exists(js_file_path):
         print(f"   [错误] encrypt.js 文件未找到！")
         return None
-    with open(js_file_path, "r", encoding="utf-8") as f: js_code = f.read()
+    with open(js_file_path, "r", encoding="utf-8") as f:
+        js_code = f.read()
     try:
         ctx = execjs.compile(js_code)
         return ctx.call("encryptPassword", password, aes_key)
@@ -39,32 +40,40 @@ def login(username, password) -> requests.Session | None:
     try:
         get_resp = session.get(LOGIN_URL)
         get_resp.raise_for_status()
-        
+
         regex = r'.*id="pwdEncryptSalt".*?value="(.*?)".*id="execution".*?value="(.*?)"'
         params = re.search(regex, get_resp.text, re.S)
-        if not params: return None
+        if not params:
+            return None
         pwd_encrypt_salt, execution = params.groups()
-        
+
         jsessionid = session.cookies.get('JSESSIONID')
         route = session.cookies.get('route')
-        if not jsessionid or not route: return None
-        
+        if not jsessionid or not route:
+            return None
+
         manual_cookie_header = f"route={route}; JSESSIONID={jsessionid}; org.springframework.web.servlet.i18n.CookieLocaleResolver.LOCALE=zh_CN"
-        
+
         encrypted_password = encrypt_password_with_js(password, pwd_encrypt_salt)
-        if not encrypted_password: return None
-        
+        if not encrypted_password:
+            return None
+
         login_data = {
-            "username": username, "password": encrypted_password, "captcha": "",
-            "_eventId": "submit", "cllt": "userNameLogin", "dllt": "generalLogin",
-            "lt": "", "execution": execution,
+            "username": username,
+            "password": encrypted_password,
+            "captcha": "",
+            "_eventId": "submit",
+            "cllt": "userNameLogin",
+            "dllt": "generalLogin",
+            "lt": "",
+            "execution": execution,
         }
-        
+
         post_headers = HEADERS.copy()
         post_headers['Cookie'] = manual_cookie_header
-        
+
         post_resp = session.post(LOGIN_URL, headers=post_headers, data=login_data, allow_redirects=False)
-        
+
         if post_resp.status_code == 302:
             session.get(post_resp.headers['Location'])
             return session
@@ -86,45 +95,51 @@ def get_grades(session: requests.Session, year: str, semester: str):
     }
     semester_code = str(int(semester) - 1)
     grade_data = {
-        "sjxz": "sjxz3", "ysyx": "yscj", "zx": "1", "fx": "0",
-        "xn": year, "xn1": str(int(year) + 1), "xq": semester_code,
+        "sjxz": "sjxz3",
+        "ysyx": "yscj",
+        "zx": "1",
+        "fx": "0",
+        "xn": year,
+        "xn1": str(int(year) + 1),
+        "xq": semester_code,
     }
-    
+
     try:
         print(f"正在查询 {year}-{int(year)+1}学年 第{semester}学期 的成绩...")
         session.get("https://jw.dgut.edu.cn/caslogin")
         resp = session.post(grade_url, headers=grade_headers, data=grade_data)
         resp.raise_for_status()
-        
+
         soup = BeautifulSoup(resp.content, "lxml")
         tables = soup.find_all("table")
         if len(tables) < 2:
             print("   [错误] 未在返回页面中找到成绩表格。")
             return
-            
+
         grade_table = tables[1]
         rows = grade_table.find_all("tr")
-        
+
         if len(rows) <= 1:
             print("   [信息] 该学期可能没有成绩数据。")
             return
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print(f" 东莞理工学院 {year}-{int(year)+1}学年 第{semester}学期 成绩单")
-        print("="*80)
-        
+        print("=" * 80)
+
         # 遍历表格的每一行 (跳过表头)
         for row in rows[1:]:
             cells = row.find_all("td")
-            if len(cells) < 13: continue 
-            
+            if len(cells) < 13:
+                continue
+
             # --- ⭐ 使用正确的列索引提取所有需要的数据 ⭐ ---
-            course_name = cells[1].text.strip().replace('\n', '') # 课程名称
-            credit = cells[2].text.strip()       # 学分
+            course_name = cells[1].text.strip().replace('\n', '')  # 课程名称
+            credit = cells[2].text.strip()  # 学分
             regular_score = cells[8].text.strip()  # 平时成绩
-            exam_score = cells[10].text.strip()   # 期末/考试成绩
+            exam_score = cells[10].text.strip()  # 期末/考试成绩
             final_score = cells[12].text.strip()  # 总评成绩
-            
+
             # 如果没有成绩，显示'--'
             regular_score = regular_score if regular_score else '--'
             exam_score = exam_score if exam_score else '--'
@@ -133,36 +148,33 @@ def get_grades(session: requests.Session, year: str, semester: str):
             # 格式化输出，让它看起来像一张真正的成绩单
             print(f"| {course_name:<28} | 学分: {credit:<4} | 平时: {regular_score:<5} | 考试: {exam_score:<5} | 最终成绩: {final_score:<5} |")
 
-        print("="*80)
+        print("=" * 80)
 
     except Exception as e:
         print(f"   [错误] 查询或解析成绩时发生错误: {e}")
 
-# --- Part 3: The Main Program (No changes) ---
+# --- Part 3: The Main Program (Modified to accept user input) ---
 
 if __name__ == "__main__":
-    MY_USERNAME = "2023428020130"
-    MY_PASSWORD = "123456twj"
-
     print("--- 东莞理工学院成绩查询器 ---")
-    if MY_USERNAME == "你的学号" or MY_PASSWORD == "你的密码":
-        print("\n!!! 请先在脚本中填入你的真实学号和密码再运行 !!!\n")
+    username = input("请输入你的学号: ")
+    password = input("请输入你的密码: ")
+
+    print("\n[步骤 1/2] 正在尝试登录...")
+    session = login(username, password)
+
+    if session:
+        print("\n[步骤 2/2] 登录成功！准备查询成绩。")
+        while True:
+            query_year = input("请输入要查询的学年 (例如: 2023): ").strip()
+            query_semester = input("请输入要查询的学期 (1 或 2): ").strip()
+            if query_year.isdigit() and query_semester in ("1", "2"):
+                get_grades(session, query_year, query_semester)
+            else:
+                print("输入不合法，请重新输入。")
+            cont = input("\n是否继续查询其他学期? (y/n): ").strip().lower()
+            if cont != 'y':
+                break
+        print("\n感谢使用！程序已退出。")
     else:
-        print("\n[步骤 1/2] 正在尝试登录...")
-        session = login(MY_USERNAME, MY_PASSWORD)
-        
-        if session:
-            print("\n[步骤 2/2] 登录成功！准备查询成绩。")
-            while True:
-                query_year = input("请输入要查询的学年 (例如: 2023): ").strip()
-                query_semester = input("请输入要查询的学期 (1 或 2): ").strip()
-                if query_year.isdigit() and query_semester in ("1", "2"):
-                    get_grades(session, query_year, query_semester)
-                else:
-                    print("输入不合法，请重新输入。")
-                cont = input("\n是否继续查询其他学期? (y/n): ").strip().lower()
-                if cont != 'y':
-                    break
-            print("\n感谢使用！程序已退出。")
-        else:
-            print("\n登录失败，无法查询成绩。")
+        print("\n登录失败，无法查询成绩。")
